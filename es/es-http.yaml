@@ -1,0 +1,46 @@
+version: '2.2'
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.10.0
+    container_name: ${ES_node_name}
+    restart: always
+    volumes:
+      - ./es-data:/usr/share/elasticsearch/data
+      - /mnt/nfs_share/es/plugins:/usr/share/elasticsearch/plugins
+      - /mnt/nfs_share/es/unicast_hosts.txt:/usr/share/elasticsearch/config/unicast_hosts.txt
+    environment:
+      #node.name：本集群节点名   如果不配置改属性，默认值是：elasticsearch。
+      - node.name=${ES_node_name}
+      #cluster.name：集群名称
+      - cluster.name=${ES_cluster_name}
+       # node.roles：是否存储数据
+      - node.roles=${ES_node_roles}
+       #es7.x cluster.initial_master_nodes之后新增的配置，初始化一个新的集群时需要此配置来选举master
+      - cluster.initial_master_nodes=${ES_master_01},${ES_master_02},${ES_master_03}
+      - discovery.seed_providers=file
+      - bootstrap.memory_lock=true
+      #关于虚拟机的值的设置，如果不合理会导致es起不来，有待探讨  虚拟机，内存的一半
+      - "ES_JAVA_OPTS=-Xms16g -Xmx16g"
+      - network.publish_host=${ES_node_ip}
+      - transport.publish_host=${ES_node_ip}
+      - ELASTIC_PASSWORD=${es_pass}
+      ###############################################优化
+      #- index.translog.flush_threshold_size = 512mb
+      #- index.translog.sync_interval = 60s
+      #- index.translog.durability = async           # ES默认每次请求都进行一次flush，但对于日志来说，这没有必要，可以将这个过程改为异步的
+      #- index.refresh_interval = 120s               # 刷盘 写入到硬盘时间
+      ###############################################
+    logging:
+      driver: "json-file"
+      options:
+        max-file: "5"
+        max-size: "10m"
+        tag: "elasticsearch"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - 9200:9200
+      - 9300:9300
+    mem_limit: 30G

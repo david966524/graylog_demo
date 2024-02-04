@@ -1,0 +1,133 @@
+version: '2'
+services:
+  graylog:
+    image: graylog/graylog:4.3.3
+    container_name: ${Graylog_name}
+    network_mode: bridge
+    restart: always
+    volumes:
+
+     #- /opt/gl_graylog.conf:/usr/share/graylog/data/config/graylog.conf
+      - ./log:/usr/share/graylog/log
+      - /mnt/nfs_share/graylog/plugin:/usr/share/graylog/plugin
+      - ./cacerts:/usr/local/openjdk-8/lib/security/cacerts
+      - graylog_journal:/usr/share/graylog/data/journal
+    environment:
+      - GRAYLOG_SERVER_JAVA_OPTS=-Xms16g -Xmx16g -XX:NewRatio=1 -XX:MaxMetaspaceSize=256m -server -XX:+ResizeTLAB -XX:+UseConcMarkSweepGC -XX:+CMSConcurrentMTEnabled -XX:+CMSClassUnloadingEnabled -XX:+UseParNewGC -XX:-OmitStackTraceInFastThrow
+      - TZ=Asia/Shanghai
+      - GRAYLOG_ROOT_TIMEZONE=Asia/Shanghai
+      - GRAYLOG_TIMEZONE=Asia/Shanghai
+
+      ## 配置项需以GRAYLOG_开头，并且是全大写的
+      ## 密码加密盐值，不能小于16个字符# 密码加密盐值，不能小于16个字符  在集群中的所有 Graylog 节点上必须相同。 pwgen -N 1 -s 96
+      - GRAYLOG_PASSWORD_SECRET=${PASSWORD_SECRET}
+
+      # root 用户初始登录时使用的密码的 SHA2 哈希值。
+      - GRAYLOG_ROOT_PASSWORD_SHA2=${ROOT_PASSWORD_SHA2}
+
+      # 是否是主节点
+      - GRAYLOG_IS_MASTER=${IS_MASTER}
+      ####update4.3.2######
+      #- GRAYLOG_STALE_LEADER_TIMEOUT=10000  ##4.3.2新增配置项目兼容STALE_MASTER_TIMEOUT
+      #- GRAYLOG_IS_LEADER=false  ## 4.3.2新增配置项目兼容is_master
+      #- GRAYLOG_SKIP_PREFLIGHT_CHECKS=true  ## 启动 Graylog 时不执行任何预检检查
+      ##########end###########
+
+      #日志受信任的代理
+      - GRAYLOG_TRUSTED_PROXIES=10.64.18.153/32
+
+
+      - GRAYLOG_NGINX_HOST=${GRAYLOG_domain}
+      # 该 URI 将在集群发现 API 中发布，以便其他 Graylog 节点能够找到并连接到此 Graylog 节点。
+      - GRAYLOG_HTTP_EXTERNAL_URI=http://${node_ip}:9000/
+      # Graylog 的公共 URI，将被 Graylog Web 界面用于与 Graylog REST API 通信。
+      - GRAYLOG_HTTP_PUBLISH_URI=http://${node_ip}:9000/  #就是node显示的节点
+      - GRAYLOG_WEB_ENDPOINT_URI=http://${GRAYLOG_domain}/api
+      #
+      - GRAYLOG_WEB_ENABLE=true
+      - GRAYLOG_REST_TRANSPORT_URI=http://${GRAYLOG_domain}:9000/api/
+
+
+
+
+
+       # es版本
+      - GRAYLOG_ELASTICSEARCH_VERSION=7
+      # 启动时重新检查检测到的陈旧主节点的时间
+      - GRAYLOG_STALE_MASTER_TIMEOUT=10000
+      # 是否允许突出显示搜索？ 根据消息的大小，这可能会占用大量内存，并且只有在确保 Elasticsearch 集群有足够的内存后才能启用。
+      - GRAYLOG_ALLOW_HIGHLIGHTING=false
+
+
+
+      #链接 MONGODB 集群： mongos 需要和mogo 创建数据库一致
+      - GRAYLOG_MONGODB_URI=mongodb://${mg_graylog_user}:${mg_graylog_pass}@mongodb_01:27017,mongodb_02:27017,mongodb_03:27017/graylog?replicaSet=mongos
+      #链接 ELASTICSEARCH 集群： 改用域名链接
+      - GRAYLOG_ELASTICSEARCH_HOSTS=http://${es_graylog_user}:${es_graylog_pass}@esd01.cg.xxx:9200,http://${es_graylog_user}:${es_graylog_pass}@esd02.cg.xxx:9200,http://${es_graylog_user}:${es_graylog_pass}@esd03.cg.xxx:9200,http://${es_graylog_user}:${es_graylog_pass}@esd04.cg.xxx:9200
+      - GRAYLOG_ELASTICSEARCH_HOSTS=http://${es_graylog_user}:${es_graylog_pass}@esd01.cg.xxx:9200,http://${es_graylog_user}:${es_graylog_pass}@esd02.cg.xxx:9200,http://${es_graylog_user}:${es_graylog_pass}@esd03.cg.xxx:9200,http://${es_graylog_user}:${es_graylog_pass}@esd04.cg.xxx:9200,http://${es_graylog_user}:${es_graylog_pass}@esd05.cg.xxx:9200,http://${es_graylog_user}:${es_graylog_pass}@esd06.cg.xxx:9200,http://${es_graylog_user}:${es_graylog_pass}@esd07.cg.xxx:9200,http://${es_graylog_user}:${es_graylog_pass}@esd08.cg.xxx:9200
+      #通过 Nodes Info 启用自动 Elasticsearch 节点发现
+      - GRAYLOG_ELASTICSEARCH_DISCOVERY_ENABLED=false
+
+      #Elasticsearch 请求的全局请求超时（例如，在搜索、索引创建或索引时间范围计算期间）基于最大努力限制 Elasticsearch 操作的运行时间。
+      - GRAYLOG_ELASTICSEARCH_REQUEST_TIMEOUT=2m
+      #并发运行的索引优化（强制合并）作业的最大数量  默认值：20
+      - GRAYLOG_ELASTICSEARCH_INDEX_OPTIMIZATION_JOBS=50
+
+      - GRAYLOG_PROCESSOR_WAIT_STRATEGY=blocking
+      #描述缓冲区处理器如何等待游标序列的等待策略      #blocking：。
+       #yielding - Compromise between performance and CPU usage.
+                   #性能和 CPU 使用率之间
+       #sleeping - Compromise between performance and CPU usage. Latency spikes can occur after quiet periods.
+                   #在性能和 CPU 使用率之间妥协。 在安静期之后可能会出现延迟峰值
+       #blocking - High throughput, low latency, higher CPU usage.
+                   #高吞吐量、低延迟、更高的 CPU 使用率
+       #busy_spinning - Avoids syscalls which could introduce latency jitter. Best when threads can be bound to specific CPU cores.
+      #总核数16
+      - GRAYLOG_INPUTBUFFER_PROCESSORS=2
+      #输入缓冲处理器[输入]
+      - GRAYLOG_PROCESSBUFFER_PROCESSORS=8
+      #处理缓冲处理器个数[处理]
+      - GRAYLOG_OUTPUTBUFFER_PROCESSORS=6
+      #并行运行的处理器数。[输出]
+      #如果您的缓冲区已满，请提高此数字。
+      - GRAYLOG_RING_SIZE=65536
+      #内部环形缓冲区的大小。 如果提高 outputbuffer_processors 不再有帮助，则提高它，必须是 2 的倍数
+
+      #在消息写入 Elasticsearch 之前，日志会保留消息，最多 12 小时或 5 GB，以先发生者为准
+      - GRAYLOG_MESSAGE_JOURNAL_MAX_SIZE=5gb
+      - GRAYLOG_MESSAGE_JOURNAL_MAX_AGE=12h
+
+    extra_hosts:
+      # mongodb IP
+      - "mongodb_01:10.64.18.146"
+      - "mongodb_02:10.64.18.147"
+      - "mongodb_03:10.64.18.148"
+       # es master IP
+      - "esm01.cg.xxx:10.64.18.146"
+      - "esm02.cg.xxx:10.64.18.147"
+      - "esm03.cg.xxx:10.64.18.148"
+       # es node IP
+      - "esd01.cg.xxx:10.64.18.149"
+      - "esd02.cg.xxx:10.64.18.150"
+      - "esd03.cg.xxx:10.64.18.151"
+      - "esd04.cg.xxx:10.64.18.152"
+
+    ports:
+     # - 9200:9200 # Elasticsearch REST API
+      - 9000:9000 # Graylog web interface and REST API
+      - 5555:5555 # Raw/Plaintext TCP
+      - 1514:1514 # Syslog TCP
+      - 1514:1514/udp # Syslog UDP
+      - 12201:12201 # GELF TCP
+      - 12201:12201/udp # GELF UDP
+      - 5044:5044 #Filebeat TCP
+      - 15044:15044 #Filebeat TCP SSL
+    logging:
+      driver: "json-file"
+      options:
+        max-file: "5"
+        max-size: "10m"
+        tag: "sec-graylog"
+volumes:
+  graylog_journal:
+    driver: local
